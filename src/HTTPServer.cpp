@@ -128,11 +128,15 @@ void HTTPServer::run()
             LOG_ERROR << "accept(): " << strerror(errno) << LOG_END;
             return;
         }
-        try {
-        std::thread t{std::bind(process_request, temp_fd)};
-        t.detach();
-        } catch (...)
-        { close(temp_fd);  throw; }
+        try
+        {
+            std::thread t{std::bind(process_request, temp_fd)};
+            t.detach();
+        } catch (const std::exception& ex)
+        {
+            close(temp_fd);
+            LOG_ERROR << "std::thread(): " << ex.what() << LOG_END;
+        }
     }
 }
 
