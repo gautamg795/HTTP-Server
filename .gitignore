@@ -1,0 +1,5 @@
+*.o
+web-server
+web-client
+*.dSYM/
+.vagrant/
