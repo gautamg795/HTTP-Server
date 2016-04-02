@@ -182,7 +182,17 @@ start:
         return;
     }
     buf.resize(pos);
-    HTTPRequest request(buf);
+    HTTPRequest request;
+    try
+    {
+        HTTPRequest _request(buf);
+        request = std::move(_request);
+    } catch (const std::exception& ex)
+    {
+        LOG_ERROR << "HTTPRequest construction failed: " << ex.what() << LOG_END;
+        close(socket);
+        return;
+    }
     LOG_INFO << "Request recieved:\n"
              << request << LOG_END;
     HTTPResponse response;
