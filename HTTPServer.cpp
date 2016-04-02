@@ -214,12 +214,33 @@ start:
         LOG_INFO << "Response: HTTP/1.0 404 Not Found" << LOG_END;
         response.set_status("404");
         response.set_phrase("Not Found");
+        response.set_header("Connection", "close");
+        response.set_body("<h1>404 Not Found</h1>");
     }
     else
     {
         LOG_INFO << "Response: HTTP/1.0 200 OK" << LOG_END;
         response.set_status("200");
         response.set_phrase("OK");
+        if (file_ok)
+        {
+            response.set_header("Content-Length", std::to_string(filesize));
+        }
+        response.set_header("Connection", "close");
+        auto connection = request.header_value("Connection");
+        if (connection)
+        {
+            auto conn_str = *connection;
+            std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
+                                                             ::tolower);
+            if (conn_str == "keep-alive")
+            {
+                response.set_header("Connection", "keep-alive");
+                response.set_header(
+                        "Keep-Alive",
+                        "timeout=" + std::to_string(HTTPServer::timeout));
+            }
+        }
     }
     std::string response_text = response.to_string();
     pos = 0;
