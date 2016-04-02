@@ -18,6 +18,7 @@
 #include <string>          // for char_traits, string, operator<<, operator==
 #include <sys/errno.h>     // for errno, EINTR
 #include <sys/fcntl.h>     // for open, O_RDONLY
+#include <sys/select.h>    // for select
 #include <sys/signal.h>    // for sigaction, SIGINT, SIGTERM, sa_handler
 #include <sys/socket.h>    // for send, accept, bind, listen, recv, setsockopt
 #include <sys/stat.h>      // for fstat, stat
@@ -25,7 +26,7 @@
 #include <unistd.h>        // for close, off_t, read, ssize_t
 
 static bool keep_running = true;
-
+int HTTPServer::timeout = 5;
 HTTPServer::HTTPServer(const std::string& hostname,
                        const std::string& port,
                        const std::string& directory) :
@@ -137,6 +138,25 @@ void HTTPServer::run()
 
 void HTTPServer::process_request(int socket)
 {
+start:
+    fd_set fdset;
+    FD_ZERO(&fdset);
+    FD_SET(socket, &fdset);
+    struct timeval timeout;
+    timeout.tv_sec = HTTPServer::timeout;
+    timeout.tv_usec = 0;
+    int ret = select(socket+1, &fdset, nullptr, nullptr, &timeout);
+    if (ret == 0)
+    {
+        LOG_INFO << "Keepalive timeout, closing connection" << LOG_END;
+        close(socket);
+        return;
+    }
+    if (ret < 0)
+    {
+        LOG_ERROR << "select(): " << std::strerror(errno) << LOG_END;
+        return;
+    }
     std::string buf;
     buf.resize(256);
     off_t pos = 0;
@@ -240,5 +260,8 @@ void HTTPServer::process_request(int socket)
         #endif
         close(filefd);
     }
-    close(socket);
+    if (*response.header_value("Connection") == "close")
+        close(socket);
+    else
+        goto start;
 }

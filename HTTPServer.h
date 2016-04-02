@@ -17,7 +17,7 @@ public:
 
 private:
     static void process_request(int socket);
-
+    static int  timeout;
     std::string hostname_;
     std::string port_;
     std::string directory_;
