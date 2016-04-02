@@ -186,9 +186,9 @@ start:
     LOG_INFO << "Request recieved:\n"
              << request << LOG_END;
     HTTPResponse response;
-    response.set_version("HTTP/1.0");
-    response.set_header("Connection", "close");
-    LOG_INFO << "Attempting to open file at " << '.' << request.path() << LOG_END;
+    response.set_version("HTTP/1.1");
+    LOG_INFO << "Attempting to open file at " << '.'
+             << request.path() << LOG_END;
     bool file_ok = true;
     int filefd = open(("." + request.path()).c_str(), O_RDONLY);
     if (filefd < 0)
@@ -247,7 +247,8 @@ start:
     ssize_t bytes_written = 0;
     do
     {
-        bytes_written = send(socket, &response_text[pos], response_text.size() - pos, 0);
+        bytes_written = send(socket, &response_text[pos],
+                             response_text.size() - pos, 0);
         pos += bytes_written;
     } while (bytes_written > 0);
     if (file_ok)
@@ -264,7 +265,8 @@ start:
             } while (bytes_read > 0 && bytes_written > 0);
             if (bytes_read < 0 || bytes_written < 0)
             {
-                LOG_ERROR << "read()/send(): " << std::strerror(errno) << LOG_END;
+                LOG_ERROR << "read()/send(): "
+                          << std::strerror(errno) << LOG_END;
                 close(socket);
                 return;
             }
