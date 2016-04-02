@@ -10,18 +10,18 @@ debug: CXXFLAGS = -O0 -std=c++11 -Wall -Wextra -D_DEBUG
 debug: all
 
 web-client: $(OBJS) $(SRCDIR)/web-client.cpp
-	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS) 
+	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS)
 
 web-server: $(OBJS) $(OBJDIR)/HTTPServer.o $(SRCDIR)/web-server.cpp
-	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS) 
+	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS)
 
-$(OBJDIR)/HTTPRequest.o: $(SRCDIR)/HTTPRequest.cpp $(SRCDIR)/HTTPRequest.h
+$(OBJDIR)/HTTPRequest.o: $(SRCDIR)/HTTPRequest.cpp $(SRCDIR)/HTTPRequest.h $(SRCDIR)/logging.h
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SRCDIR)/HTTPRequest.cpp
 
-$(OBJDIR)/HTTPResponse.o: $(SRCDIR)/HTTPResponse.cpp $(SRCDIR)/HTTPResponse.h
+$(OBJDIR)/HTTPResponse.o: $(SRCDIR)/HTTPResponse.cpp $(SRCDIR)/HTTPResponse.h $(SRCDIR)/logging.h
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SRCDIR)/HTTPResponse.cpp
 
-$(OBJDIR)/HTTPServer.o: $(SRCDIR)/HTTPServer.cpp $(SRCDIR)/HTTPServer.h $(OBJS) 
+$(OBJDIR)/HTTPServer.o: $(SRCDIR)/HTTPServer.cpp $(SRCDIR)/HTTPServer.h $(SRCDIR)/logging.h $(OBJS)
 	$(CXX) -c -o $@ $(CXXFLAGS) $(SRCDIR)/HTTPServer.cpp
 
 $(OBJS): | $(OBJDIR)
