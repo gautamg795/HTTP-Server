@@ -202,6 +202,8 @@ start:
         struct stat filestat;
         if (fstat(filefd, &filestat) != -1)
         {
+            if (!S_ISREG(filestat.st_mode))
+                file_ok = false;
             filesize = filestat.st_size;
         }
         else
