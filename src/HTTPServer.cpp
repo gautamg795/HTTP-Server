@@ -32,11 +32,11 @@ HTTPServer::HTTPServer(const std::string& hostname,
                        const std::string& directory) :
     hostname_(hostname), port_(port), directory_(directory), sockfd_(-1)
 {
-    //if(chdir(directory_.c_str()) < 0)
-    //{
-        //LOG_ERROR << "chdir(): " << std::strerror(errno) << LOG_END;
-        //std::exit(1);
-    //}
+    if(chdir(("./" + directory_).c_str()) < 0)
+    {
+        LOG_ERROR << "chdir(): " << std::strerror(errno) << LOG_END;
+        std::exit(1);
+    }
     LOG_INFO << "Initializing HTTP server at "
              << hostname << ':' << port
              << " serving files from " << directory << LOG_END;
