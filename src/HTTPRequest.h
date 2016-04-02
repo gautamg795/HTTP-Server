@@ -2,7 +2,6 @@
 #define HTTPREQUEST_H
 
 #include <iosfwd>         // for ostream
-#include <stdexcept>      // for runtime_error
 #include <string>         // for string
 #include <unordered_map>  // for unordered_map
 

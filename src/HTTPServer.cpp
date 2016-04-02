@@ -7,21 +7,24 @@
 #include <sys/sendfile.h>  // for sendfile
 #endif
 
+#include <algorithm>       // for transform
 #include <arpa/inet.h>     // for inet_ntoa
-#include <csignal>         // for sigaction
+#include <cctype>          // for tolower
+#include <cerrno>          // for errno, EINTR
+#include <csignal>         // for sigaction, SIGINT, SIGTERM, etc
 #include <cstdlib>         // for exit
 #include <cstring>         // for strerror, memset
+#include <exception>       // for exception
+#include <fcntl.h>         // for open, O_RDONLY
 #include <functional>      // for _Bind, bind
 #include <iostream>        // for operator<<, basic_ostream, ostream, cout
 #include <netdb.h>         // for addrinfo, freeaddrinfo, gai_strerror, geta...
 #include <netinet/in.h>    // for IPPROTO_TCP, sockaddr_in
 #include <string>          // for char_traits, string, operator<<, operator==
-#include <sys/errno.h>     // for errno, EINTR
-#include <sys/fcntl.h>     // for open, O_RDONLY
 #include <sys/select.h>    // for select
-#include <sys/signal.h>    // for sigaction, SIGINT, SIGTERM, sa_handler
 #include <sys/socket.h>    // for send, accept, bind, listen, recv, setsockopt
 #include <sys/stat.h>      // for fstat, stat
+#include <sys/time.h>      // for timeval
 #include <thread>          // for thread
 #include <unistd.h>        // for close, off_t, read, ssize_t
 
