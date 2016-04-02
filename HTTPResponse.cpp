@@ -89,7 +89,7 @@ const std::string* HTTPResponse::header_value(
 void HTTPResponse::set_header(const std::string& header,
                               const std::string& value)
 {
-    headers_.emplace(header, value);
+    headers_[header] = value;
 }
 
 std::string HTTPResponse::to_string() const

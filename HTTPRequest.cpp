@@ -97,7 +97,7 @@ const std::string* HTTPRequest::header_value(const std::string& value) const
 
 void HTTPRequest::set_header(const std::string& header, const std::string& value)
 {
-    headers_.emplace(header, value);
+    headers_[header] = value;
 }
 
 std::string HTTPRequest::to_string() const
