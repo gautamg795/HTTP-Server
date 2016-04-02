@@ -30,7 +30,7 @@ $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
 clean:
-	rm -f $(OBJDIR)/*
+	rm -rf $(OBJDIR)
 	rm -f web-server-client.tar.gz
 	rm -rf *.dSYM/
 	rm -f web-server web-client
