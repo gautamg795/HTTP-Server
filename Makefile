@@ -1,37 +1,39 @@
-CXXFLAGS = -Ofast -std=c++11 -Wall -Wextra -g
+CXXFLAGS = -O3 -std=c++11 -Wall -Wextra
 LDFLAGS = -lpthread
 
-# The directory for the build files, may be overridden on make command line.
-builddir = .
+SRCDIR = ./src
+OBJDIR = ./build
+OBJS = $(addprefix $(OBJDIR)/,HTTPRequest.o HTTPResponse.o)
+all: web-server web-client
 
-all: $(builddir)/web-server $(builddir)/web-client
-
-debug: CXXFLAGS = -O0 -g -std=c++11 -Wall -Wextra -D_DEBUG -lpthread
+debug: CXXFLAGS = -O0 -std=c++11 -Wall -Wextra -D_DEBUG
 debug: all
 
-$(builddir)/web-client: $(builddir)/HTTPRequest.o $(builddir)/HTTPResponse.o web-client.cpp
+web-client: $(OBJS) $(SRCDIR)/web-client.cpp
 	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS) 
 
-$(builddir)/web-server: $(builddir)/HTTPRequest.o $(builddir)/HTTPResponse.o $(builddir)/HTTPServer.o $(builddir)/RequestProcessor.o web-server.cpp
+web-server: $(OBJS) $(OBJDIR)/HTTPServer.o $(SRCDIR)/web-server.cpp
 	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS) 
 
-$(builddir)/HTTPRequest.o: HTTPRequest.cpp HTTPRequest.h
-	$(CXX) -c -o $@ $(CXXFLAGS) HTTPRequest.cpp
+$(OBJDIR)/HTTPRequest.o: $(SRCDIR)/HTTPRequest.cpp $(SRCDIR)/HTTPRequest.h
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SRCDIR)/HTTPRequest.cpp
 
-$(builddir)/HTTPResponse.o: HTTPResponse.cpp HTTPResponse.h
-	$(CXX) -c -o $@ $(CXXFLAGS) HTTPResponse.cpp
+$(OBJDIR)/HTTPResponse.o: $(SRCDIR)/HTTPResponse.cpp $(SRCDIR)/HTTPResponse.h
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SRCDIR)/HTTPResponse.cpp
 
-$(builddir)/HTTPServer.o: HTTPServer.cpp HTTPServer.h
-	$(CXX) -c -o $@ $(CXXFLAGS) HTTPServer.cpp
+$(OBJDIR)/HTTPServer.o: $(SRCDIR)/HTTPServer.cpp $(SRCDIR)/HTTPServer.h $(OBJS) 
+	$(CXX) -c -o $@ $(CXXFLAGS) $(SRCDIR)/HTTPServer.cpp
 
-$(builddir)/RequestProcessor.o: RequestProcessor.cpp RequestProcessor.h
-	$(CXX) -c -o $@ $(CXXFLAGS) RequestProcessor.cpp
+$(OBJS): | $(OBJDIR)
+
+$(OBJDIR):
+	mkdir -p $(OBJDIR)
 
 clean:
-	rm -f *.o *.d
+	rm -f $(OBJDIR)/*
 	rm -f web-server-client.tar.gz
 	rm -rf *.dSYM/
-	rm -f $(builddir)/web-server $(builddir)/web-client
+	rm -f web-server web-client
 
 dist: clean
 	tar czf web-server-client.tar.gz ./*
