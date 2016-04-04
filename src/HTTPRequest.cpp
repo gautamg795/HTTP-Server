@@ -3,7 +3,7 @@
 #include <sstream>    // for operator<<, basic_ostream, basic_istream, basic...
 #include <stdexcept>  // for logic_error
 #include <utility>    // for move, pair
-HTTPRequest::HTTPRequest(const std::string& req)
+HTTPRequest::HTTPRequest(const std::string& req, std::string* remain)
 {
     std::istringstream iss(req);
     std::string line;
@@ -19,7 +19,7 @@ HTTPRequest::HTTPRequest(const std::string& req)
     path_ = line.substr(verb_.size() + 1,
                         line.find_last_of(' ') - verb_.size() - 1);
     version_ = line.substr(line.find_last_of(' ') + 1);
-    while (std::getline(iss, line)) 
+    while (std::getline(iss, line))
     {
         line.pop_back(); // remove \r
         if (line.size() == 0)
@@ -31,8 +31,8 @@ HTTPRequest::HTTPRequest(const std::string& req)
         std::string value = line.substr(line.find_first_of(' ') + 1);
         headers_.emplace(std::move(header), std::move(value));
     }
-    if (iss)
-        body_ = iss.str().substr(iss.tellg()); 
+    if (iss && remain)
+        *remain = iss.str().substr(iss.tellg());
 }
 
 
@@ -71,18 +71,6 @@ void HTTPRequest::set_version(const std::string& version)
     version_ = version;
 }
 
-
-const std::string& HTTPRequest::body() const
-{
-    return body_;
-}
-
-
-void HTTPRequest::set_body(const std::string& body)
-{
-    body_ = body;
-}
-
 const std::string* HTTPRequest::header_value(const std::string& value) const
 {
     auto iter = headers_.find(value);
@@ -115,6 +103,5 @@ std::ostream& operator<<(std::ostream& os, const HTTPRequest& req)
         os << it.first << ": " << it.second << "\r\n";
     }
     os << "\r\n";
-    os << req.body();
     return os;
 }

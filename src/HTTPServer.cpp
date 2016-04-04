@@ -145,165 +145,184 @@ void HTTPServer::run()
 
 void HTTPServer::process_request(int socket)
 {
-start:
-    fd_set fdset;
-    FD_ZERO(&fdset);
-    FD_SET(socket, &fdset);
-    struct timeval timeout;
-    timeout.tv_sec = HTTPServer::timeout;
-    timeout.tv_usec = 0;
-    int ret = select(socket+1, &fdset, nullptr, nullptr, &timeout);
-    if (ret == 0)
+    std::string remainder;
+    while(true)
     {
-        LOG_INFO << "Keepalive timeout, closing connection" << LOG_END;
-        close(socket);
-        return;
-    }
-    if (ret < 0)
-    {
-        LOG_ERROR << "select(): " << std::strerror(errno) << LOG_END;
-        return;
-    }
-    std::string buf;
-    buf.resize(256);
-    off_t pos = 0;
-    ssize_t bytes_read = 0;
-    do {
-        bytes_read = recv(socket, &buf[pos], buf.size() - pos, 0);
-        pos += bytes_read;
-        if (buf.size() - pos < 8)
+        bool have_complete_request = remainder.find("\r\n\r\n") != std::string::npos;
+        fd_set fdset;
+        FD_ZERO(&fdset);
+        FD_SET(socket, &fdset);
+        struct timeval timeout;
+        int ret;
+        if (!have_complete_request)
         {
-            buf.resize(buf.size() * 2);
-        }
-        if (bytes_read > 0 && pos > 4 && buf.substr(pos - 4, 4) == "\r\n\r\n")
-            break;
-    } while (bytes_read > 0);
-    if (bytes_read < 0)
-    {
-        LOG_ERROR << "recv(): " << std::strerror(errno) << LOG_END;
-        return;
-    }
-    else if (bytes_read == 0)
-    {
-        close(socket);
-        return;
-    }
-    buf.resize(pos);
-    HTTPRequest request;
-    try
-    {
-        HTTPRequest _request(buf);
-        request = std::move(_request);
-    } catch (const std::exception& ex)
-    {
-        LOG_ERROR << "HTTPRequest construction failed: " << ex.what() << LOG_END;
-        close(socket);
-        return;
-    }
-    LOG_INFO << "Request recieved:\n"
-             << request << LOG_END;
-    HTTPResponse response;
-    response.set_version("HTTP/1.1");
-    LOG_INFO << "Attempting to open file at " << '.'
-             << request.path() << LOG_END;
-    bool file_ok = true;
-    int filefd = open(("." + request.path()).c_str(), O_RDONLY);
-    if (filefd < 0)
-    {
-        LOG_ERROR << "open(): " << std::strerror(errno) << " opening file "
-                  << "." << request.path() << LOG_END;
-        file_ok = false;
-    }
-    off_t filesize = 0;
-    if (file_ok) {
-        struct stat filestat;
-        if (fstat(filefd, &filestat) != -1)
-        {
-            if (!S_ISREG(filestat.st_mode))
-                file_ok = false;
-            filesize = filestat.st_size;
+            timeout.tv_sec = HTTPServer::timeout;
+            timeout.tv_usec = 0;
+            ret = select(socket+1, &fdset, nullptr, nullptr, &timeout);
         }
         else
-            file_ok = false;
-    }
-    if (!file_ok)
-    {
-        LOG_INFO << "Response: HTTP/1.0 404 Not Found" << LOG_END;
-        response.set_status("404");
-        response.set_phrase("Not Found");
-        response.set_header("Connection", "close");
-        response.set_body("<h1>404 Not Found</h1>");
-    }
-    else
-    {
-        LOG_INFO << "Response: HTTP/1.0 200 OK" << LOG_END;
-        response.set_status("200");
-        response.set_phrase("OK");
-        if (file_ok)
         {
-            response.set_header("Content-Length", std::to_string(filesize));
+            ret = 0;
         }
-        response.set_header("Connection", "close");
-        auto connection = request.header_value("Connection");
-        if (connection)
+        if (ret == 0 && remainder.empty()) // keepalive timeout only applies between requests
         {
-            auto conn_str = *connection;
-            std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
-                                                             ::tolower);
-            if (conn_str == "keep-alive")
-            {
-                response.set_header("Connection", "keep-alive");
-                response.set_header(
-                        "Keep-Alive",
-                        "timeout=" + std::to_string(HTTPServer::timeout));
-            }
+            LOG_INFO << "Keepalive timeout, closing connection" << LOG_END;
+            close(socket);
+            return;
         }
-    }
-    std::string response_text = response.to_string();
-    pos = 0;
-    ssize_t bytes_written = 0;
-    do
-    {
-        bytes_written = send(socket, &response_text[pos],
-                             response_text.size() - pos, 0);
-        pos += bytes_written;
-    } while (bytes_written > 0);
-    if (file_ok)
-    {
-        bytes_written = 0;
-        pos = 0;
-        #ifdef __APPLE__
-        // Cheat on Mac; slower
+        if (ret < 0)
         {
-            char buf[8192];
+            LOG_ERROR << "select(): " << std::strerror(errno) << LOG_END;
+            return;
+        }
+        std::string buf = remainder;
+        off_t pos = buf.size();
+        ssize_t bytes_read = 0;
+        if (!have_complete_request) // get more data if we don't have a full request
+        {
+            buf.resize(256 + buf.size());
             do {
-                bytes_read = read(filefd, buf, 8192);
-                bytes_written = send(socket, buf, bytes_read, 0);
-            } while (bytes_read > 0 && bytes_written > 0);
-            if (bytes_read < 0 || bytes_written < 0)
+                bytes_read = recv(socket, &buf[pos], buf.size() - pos, 0);
+                pos += bytes_read;
+                if (buf.size() - pos < 8)
+                {
+                    buf.resize(buf.size() * 2);
+                }
+                if (buf.find("\r\n\r\n") != std::string::npos)
+                    break;
+            } while (bytes_read > 0);
+            if (bytes_read < 0)
             {
-                LOG_ERROR << "read()/send(): "
-                          << std::strerror(errno) << LOG_END;
+                LOG_ERROR << "recv(): " << std::strerror(errno) << LOG_END;
+                return;
+            }
+            else if (bytes_read == 0)
+            {
+                LOG_INFO << "Connection closed by peer" << LOG_END;
                 close(socket);
                 return;
             }
+            buf.resize(pos);
         }
-        #else
+        HTTPRequest request;
+        try
+        {
+            HTTPRequest _request(buf, &remainder);
+            request = std::move(_request);
+        } catch (const std::exception& ex)
+        {
+            LOG_ERROR << "HTTPRequest construction failed: " << ex.what() << LOG_END;
+            close(socket);
+            return;
+        }
+        LOG_INFO << "Request recieved:\n"
+                << request << LOG_END;
+        HTTPResponse response;
+        response.set_version("HTTP/1.1");
+        LOG_INFO << "Attempting to open file at " << '.'
+                << request.path() << LOG_END;
+        bool file_ok = true;
+        int filefd = open(("." + request.path()).c_str(), O_RDONLY);
+        if (filefd < 0)
+        {
+            LOG_ERROR << "open(): " << std::strerror(errno) << " opening file "
+                    << "." << request.path() << LOG_END;
+            file_ok = false;
+        }
+        off_t filesize = 0;
+        if (file_ok) {
+            struct stat filestat;
+            if (fstat(filefd, &filestat) != -1)
+            {
+                if (!S_ISREG(filestat.st_mode))
+                    file_ok = false;
+                filesize = filestat.st_size;
+            }
+            else
+                file_ok = false;
+        }
+        if (!file_ok)
+        {
+            LOG_INFO << "Response: HTTP/1.0 404 Not Found" << LOG_END;
+            response.set_status("404");
+            response.set_phrase("Not Found");
+            response.set_header("Connection", "close");
+            response.set_body("<h1>404 Not Found</h1>");
+        }
+        else
+        {
+            LOG_INFO << "Response: HTTP/1.0 200 OK" << LOG_END;
+            response.set_status("200");
+            response.set_phrase("OK");
+            if (file_ok)
+            {
+                response.set_header("Content-Length", std::to_string(filesize));
+            }
+            response.set_header("Connection", "close");
+            auto connection = request.header_value("Connection");
+            if (connection)
+            {
+                auto conn_str = *connection;
+                std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
+                                                                ::tolower);
+                if (conn_str == "keep-alive")
+                {
+                    response.set_header("Connection", "keep-alive");
+                    response.set_header(
+                            "Keep-Alive",
+                            "timeout=" + std::to_string(HTTPServer::timeout));
+                }
+            }
+        }
+        std::string response_text = response.to_string();
+        pos = 0;
+        ssize_t bytes_written = 0;
         do
         {
-            bytes_written = sendfile(socket, filefd, &pos, filesize - pos);
-            if (bytes_written < 0)
+            bytes_written = send(socket, &response_text[pos],
+                                response_text.size() - pos, 0);
+            pos += bytes_written;
+        } while (bytes_written > 0);
+        if (file_ok)
+        {
+            bytes_written = 0;
+            pos = 0;
+            #ifdef __APPLE__
+            // sendfile broken on Mac, send the file manually
             {
-                LOG_ERROR << "sendfile(): " << std::strerror(errno) << LOG_END;
-                close(socket);
-                return;
+                char buf[8192];
+                do {
+                    bytes_read = read(filefd, buf, 8192);
+                    bytes_written = send(socket, buf, bytes_read, 0);
+                } while (bytes_read > 0 && bytes_written > 0);
+                if (bytes_read < 0 || bytes_written < 0)
+                {
+                    LOG_ERROR << "read()/send(): "
+                            << std::strerror(errno) << LOG_END;
+                    close(socket);
+                    return;
+                }
             }
-        } while (pos != filesize);
-        #endif
-        close(filefd);
+            #else
+            do
+            {
+                bytes_written = sendfile(socket, filefd, &pos, filesize - pos);
+                if (bytes_written < 0)
+                {
+                    LOG_ERROR << "sendfile(): " << std::strerror(errno) << LOG_END;
+                    close(socket);
+                    return;
+                }
+            } while (pos != filesize);
+            #endif
+            close(filefd);
+        }
+        if (*response.header_value("Connection") == "close")
+        {
+            close(socket);
+            return;
+        }
+        else
+            continue;
     }
-    if (*response.header_value("Connection") == "close")
-        close(socket);
-    else
-        goto start;
 }

@@ -9,7 +9,7 @@ class HTTPRequest
 {
 public:
     HTTPRequest() = default;
-    HTTPRequest(const std::string& req);
+    HTTPRequest(const std::string& req, std::string* remain = nullptr);
 
     const std::string& verb() const;
     void set_verb(const std::string& verb);
@@ -19,9 +19,6 @@ public:
 
     const std::string& version() const;
     void set_version(const std::string& version);
-
-    const std::string& body() const;
-    void set_body(const std::string& body);
 
     const std::string* header_value(const std::string& header) const;
     void set_header(const std::string& header, const std::string& value);
@@ -34,7 +31,6 @@ private:
     std::string verb_;
     std::string path_;
     std::string version_;
-    std::string body_;
     std::unordered_map<std::string, std::string> headers_;
 };
 
