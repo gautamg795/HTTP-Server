@@ -1,4 +1,4 @@
-CXXFLAGS = -O3 -std=c++11 -Wall -Wextra
+CXXFLAGS = -O3 -std=c++11 -Wall -Wextra -g
 LDFLAGS = -lpthread
 
 SRCDIR = ./src
@@ -6,7 +6,7 @@ OBJDIR = ./build
 OBJS = $(addprefix $(OBJDIR)/,HTTPRequest.o HTTPResponse.o)
 all: web-server web-client
 
-debug: CXXFLAGS = -O0 -std=c++11 -Wall -Wextra -D_DEBUG
+debug: CXXFLAGS = -O0 -std=c++11 -Wall -Wextra -D_DEBUG -g
 debug: all
 
 web-client: $(OBJS) $(SRCDIR)/web-client.cpp
