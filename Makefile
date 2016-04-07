@@ -1,3 +1,4 @@
+USERID=
 CXXFLAGS = -O3 -std=c++11 -Wall -Wextra -g
 LDFLAGS = -lpthread
 
@@ -35,7 +36,12 @@ clean:
 	rm -rf *.dSYM/
 	rm -f web-server web-client
 
-dist: clean
-	tar czf web-server-client.tar.gz ./*
+tarball: req-user-id clean
+	tar czf $(USERID).tar.gz ./*
 
-.PHONY: all clean debug dist
+req-user-id:
+ifndef USERID
+	$(error Run `make tarball USERID=xxx`)
+endif
+
+.PHONY: all clean debug tarball req-user-id
