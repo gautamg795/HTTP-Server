@@ -25,21 +25,37 @@
 #include <sys/socket.h>    // for send, accept, bind, listen, recv, setsockopt
 #include <sys/stat.h>      // for fstat, stat
 #include <sys/time.h>      // for timeval
+#include <regex>
 #include <thread>          // for thread
 #include <unistd.h>        // for close, off_t, read, ssize_t
+#include <wordexp.h>       // for wordexp
 
 static bool keep_running = true;
 int HTTPServer::timeout = 5;
+
 HTTPServer::HTTPServer(const std::string& hostname,
                        const std::string& port,
                        const std::string& directory) :
     hostname_(hostname), port_(port), directory_(directory), sockfd_(-1)
 {
-    if(chdir(("./" + directory_).c_str()) < 0)
+    #if !defined(__GNUC__) || __GNUC__ >= 5
+    directory_ = std::regex_replace(directory_, std::regex(R"(([^\\]) )"), R"($1\ )");
+    #endif
+    ::setenv("IFS", "\n", 1);
+    wordexp_t expansion;
+    if (wordexp(directory_.c_str(), &expansion, 0) != 0 || expansion.we_wordc < 1)
     {
-        LOG_ERROR << "chdir(): " << std::strerror(errno) << LOG_END;
+        LOG_ERROR << "Error expanding directory path given" << LOG_END;
         std::exit(1);
     }
+    if(chdir(expansion.we_wordv[0]) < 0)
+    {
+        LOG_ERROR << "chdir(): " << std::strerror(errno)
+                  << ": " << expansion.we_wordv[0] << LOG_END;
+        std::exit(1);
+    }
+    LOG_INFO << "Changed directory to " << expansion.we_wordv[0] << LOG_END;
+    wordfree(&expansion);
     LOG_INFO << "Initializing HTTP server at "
              << hostname << ':' << port
              << " serving files from " << directory << LOG_END;
