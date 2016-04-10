@@ -33,6 +33,10 @@
 
 static bool keep_running = true;
 int HTTPServer::timeout = 5;
+
+/**
+ * @summary struct used by run_async to keep track of each client's connection
+ */
 struct ClientState
 {
     enum {
@@ -48,6 +52,15 @@ struct ClientState
     bool        keep_alive_ = false;
 };
 
+/**
+ * @summary Constructs the HTTPServer, performs hostname lookup, binds the
+ * socket, changes directory as necessary.
+ *
+ * @param hostname hostname (or IP) to bind to
+ * @param port the numeric port to attach to
+ * @param directory the directory from which to serve files
+ *                      parses ~ and spaces if possible
+ */
 HTTPServer::HTTPServer(const std::string& hostname,
                        const std::string& port,
                        const std::string& directory) :
@@ -133,6 +146,9 @@ HTTPServer::~HTTPServer()
     close(sockfd_);
 }
 
+/**
+ * @summary Adds a signal handler for SIGINT and SIGTERM to shut down server
+ */
 void HTTPServer::install_signal_handler() const
 {
     struct sigaction action;
@@ -142,6 +158,10 @@ void HTTPServer::install_signal_handler() const
     sigaction(SIGTERM, &action, nullptr);
 }
 
+/**
+ * @summary Run server synchronously; spawns a new thread to process_request
+ * whenever a new request comes in on accept()
+ */
 void HTTPServer::run()
 {
     if(listen(sockfd_, 64) != 0)
@@ -174,6 +194,11 @@ void HTTPServer::run()
     }
 }
 
+/**
+ * @summary Asynchronously run the server with non-blocking sockets.
+ * Uses poll() to check when sockets are ready for read/write and loops through
+ * the ready sockets, reading/writing as necessary
+ */
 void HTTPServer::run_async()
 {
     fcntl(sockfd_, F_SETFL, O_NONBLOCK);
@@ -429,6 +454,13 @@ void HTTPServer::run_async()
     }
 }
 
+/**
+ * @summary Synchronously reads and responds to the request on 'socket'
+ * Should be run by a separate thread
+ * Handles keep-alive if necessary
+ *
+ * @param socket the file descriptor returned by accept()
+ */
 void HTTPServer::process_request(int socket)
 {
     std::string remainder;
