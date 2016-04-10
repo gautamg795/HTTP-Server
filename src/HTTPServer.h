@@ -14,6 +14,7 @@ public:
 
     void install_signal_handler() const;
     void run();
+    void run_async();
 
 private:
     static void process_request(int socket);

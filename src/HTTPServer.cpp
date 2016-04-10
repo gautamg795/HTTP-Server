@@ -21,6 +21,7 @@
 #include <netdb.h>         // for addrinfo, freeaddrinfo, gai_strerror, geta...
 #include <netinet/in.h>    // for IPPROTO_TCP, sockaddr_in
 #include <string>          // for char_traits, string, operator<<, operator==
+#include <poll.h>          // for poll
 #include <sys/select.h>    // for select
 #include <sys/socket.h>    // for send, accept, bind, listen, recv, setsockopt
 #include <sys/stat.h>      // for fstat, stat
@@ -32,6 +33,20 @@
 
 static bool keep_running = true;
 int HTTPServer::timeout = 5;
+struct ClientState
+{
+    enum {
+        READ,
+        WRITE_RESPONSE,
+        WRITE_FILE
+    }           state_ = READ;
+    std::string buf_;
+    std::string remainder_;
+    off_t       pos_ = 0;
+    int         filefd_ = -1;
+    bool        file_ok_ = true;
+    bool        keep_alive_ = false;
+};
 
 HTTPServer::HTTPServer(const std::string& hostname,
                        const std::string& port,
@@ -155,6 +170,261 @@ void HTTPServer::run()
         {
             close(temp_fd);
             LOG_ERROR << "std::thread(): " << ex.what() << LOG_END;
+        }
+    }
+}
+
+void HTTPServer::run_async()
+{
+    fcntl(sockfd_, F_SETFL, O_NONBLOCK);
+    std::vector<struct pollfd> fds(std::max(256, sockfd_), {-1, POLLIN, 0});
+    std::vector<ClientState> clientstates(fds.size());
+    fds[sockfd_] = {sockfd_, POLLIN, 0};
+    if (listen(sockfd_, 64) != 0)
+    {
+        LOG_ERROR << "listen(): " << std::strerror(errno) << LOG_END;
+        return;
+    }
+    LOG_INFO << "Listening on port " << port_ << LOG_END;
+    while (keep_running)
+    {
+        int ret = poll(&fds[0], fds.size(), -1);
+        if (ret == -1)
+        {
+            if (errno == EINTR)
+            {
+                continue;
+            }
+            LOG_ERROR << "poll(): " << std::strerror(errno) << LOG_END;
+        }
+        for (const struct pollfd & poll_fd : fds)
+        {
+            if (poll_fd.fd > -1 && poll_fd.revents & POLLIN)
+            {
+                if (poll_fd.fd == sockfd_)
+                {
+                    int temp_fd = accept(sockfd_, nullptr, nullptr);
+                    if (temp_fd < 0)
+                    {
+                        LOG_ERROR << "accept(): " << strerror(errno) << LOG_END;
+                    }
+                    fcntl(temp_fd, F_SETFL, O_NONBLOCK);
+                    if (fds.size() < (unsigned)temp_fd)
+                    {
+                        fds.resize(temp_fd + 64, {-1, POLLIN, 0});
+                        clientstates.resize(temp_fd + 64);
+                        fds[temp_fd] = {temp_fd, POLLIN, 0};
+                        break;
+                    }
+                    fds[temp_fd] = {temp_fd, POLLIN, 0};
+                }
+                else
+                {
+                    ClientState& state = clientstates[poll_fd.fd];
+                    state.buf_ = std::move(state.remainder_);
+                    state.pos_ = state.buf_.size();
+                    state.buf_.resize(256 + state.buf_.size());
+                    int bytes_read = recv(poll_fd.fd, &state.buf_[state.pos_],
+                                          state.buf_.size() - state.pos_, 0);
+                    state.pos_ += bytes_read;
+                    if (state.buf_.size() - state.pos_ < 8)
+                    {
+                        state.buf_.resize(state.buf_.size() * 2);
+                    }
+                    if (bytes_read == 0)
+                    {
+                        LOG_INFO << "Connection closed by peer" << LOG_END;
+                        close(poll_fd.fd);
+                        fds[poll_fd.fd].fd = -1;
+                        state = ClientState();
+                        continue;
+                    }
+                    if (bytes_read < 0)
+                    {
+                        if (errno == EWOULDBLOCK)
+                        {
+                            LOG_INFO << "Read would block" << LOG_END;
+                            continue;
+                        }
+                        LOG_ERROR << "read(): " << std::strerror(errno) << LOG_END;
+                        close(poll_fd.fd);
+                        fds[poll_fd.fd].fd = -1;
+                        state = ClientState();
+                        break;
+                    }
+                    if (state.buf_.find("\r\n\r\n") != std::string::npos)
+                    {
+                       HTTPRequest request;
+                       try
+                       {
+                           HTTPRequest _request(state.buf_, &state.remainder_);
+                           request = std::move(_request);
+                       } catch (const std::exception& ex)
+                       {
+                           LOG_ERROR << "HTTPRequest construction failed: "
+                                     << ex.what() << LOG_END;
+                           close(poll_fd.fd);
+                           fds[poll_fd.fd].fd = -1;
+                           state = ClientState();
+                       }
+                       HTTPResponse response;
+                       response.set_version("HTTP/1.1");
+                       state.filefd_ = open(("." + request.path()).c_str(), O_RDONLY);
+                       if (state.filefd_ < 0)
+                       {
+                           LOG_ERROR << "open(): " << std::strerror(errno)
+                                     << " opening file ." << request.path()
+                                     << LOG_END;
+                           state.file_ok_ = false;
+                       }
+                       off_t filesize = 0;
+                       if (state.file_ok_)
+                       {
+                           struct stat filestat;
+                           if (fstat(state.filefd_, &filestat) != -1)
+                           {
+                               if (!S_ISREG(filestat.st_mode))
+                                   state.file_ok_ = false;
+                               filesize = filestat.st_size;
+                           }
+                           else
+                               state.file_ok_ = false;
+                       }
+                       if (!state.file_ok_)
+                       {
+                           LOG_INFO << "Response: HTTP/1.0 404 Not Found"
+                                    << LOG_END;
+                           response.set_status("404");
+                           response.set_phrase("Not Found");
+                           response.set_header("Connection", "close");
+                           state.keep_alive_ = false;
+                           response.set_body("<h1>404 Not Found</h1>");
+                       }
+                       else
+                       {
+                           LOG_INFO << "Response: HTTP/1.0 200 OK" << LOG_END;
+                           response.set_status("200");
+                           response.set_phrase("OK");
+                           if (state.file_ok_)
+                           {
+                               response.set_header("Content-Length",
+                                                   std::to_string(filesize));
+                           }
+                           response.set_header("Connection", "close");
+                           state.keep_alive_ = false;
+                           auto connection = request.header_value("Connection");
+                           if (connection)
+                           {
+                                auto conn_str = *connection;
+                                std::transform(conn_str.begin(), conn_str.end(),
+                                               conn_str.begin(), ::tolower);
+                                if (conn_str == "keep-alive")
+                                {
+                                    response.set_header("Connection",
+                                                        "keep-alive");
+                                    response.set_header(
+                                            "Keep-Alive",
+                                            "timeout=" +
+                                            std::to_string(HTTPServer::timeout));
+                                    state.keep_alive_ = true;
+                                }
+                           }
+                       }
+                       state.buf_ = response.to_string();
+                       state.pos_ = 0;
+                       state.state_ = ClientState::WRITE_RESPONSE;
+                       fds[poll_fd.fd].events = POLLOUT;
+                    }
+                    else
+                    {
+                        state.buf_.resize(state.pos_);
+                        state.remainder_ = std::move(state.buf_);
+                    }
+                }
+
+            }
+            else if (poll_fd.fd > -1 && poll_fd.revents & POLLOUT)
+            {
+                ClientState& state = clientstates[poll_fd.fd];
+                if (state.state_ == ClientState::WRITE_RESPONSE)
+                {
+                    ssize_t bytes_written = send(poll_fd.fd,
+                                                 &state.buf_[state.pos_],
+                                                 state.buf_.size() - state.pos_,
+                                                 0);
+                    state.pos_ += bytes_written;
+                    if (bytes_written < 0)
+                    {
+                        if (errno == EWOULDBLOCK)
+                        {
+                            continue;
+                        }
+                        LOG_ERROR << "send(): " << std::strerror(errno) << LOG_END;
+                        close(poll_fd.fd);
+                        close(state.filefd_);
+                        state = ClientState();
+                        fds[poll_fd.fd].fd = -1;
+                    }
+                    else if (bytes_written == 0 || state.pos_ == (off_t)state.buf_.size())
+                    {
+                        if (state.file_ok_)
+                        {
+                            state.state_ = ClientState::WRITE_FILE;
+                            state.pos_ = 0;
+                            state.buf_.clear();
+                            state.buf_.resize(2048);
+                        }
+                        else
+                        {
+                            if (state.keep_alive_)
+                            {
+                                fds[poll_fd.fd].events = POLLIN;
+                                state.state_ = ClientState::READ;
+                                state.pos_ = 0;
+                                state.filefd_ = -1;
+                            }
+                            else
+                            {
+                                close(poll_fd.fd);
+                                close(state.filefd_);
+                                state = ClientState();
+                                fds[poll_fd.fd].fd = -1;
+                            }
+                        }
+                    }
+                }
+                else if (state.state_ == ClientState::WRITE_FILE)
+                {
+                    ssize_t bytes_read = read(state.filefd_, &state.buf_[0], state.buf_.size());
+                    ssize_t bytes_written = send(poll_fd.fd, &state.buf_[0], bytes_read, 0);
+                    if (bytes_read < 0 || bytes_written < 0)
+                    {
+                        LOG_ERROR << "read()/send(): "
+                                  << std::strerror(errno) << LOG_END;
+                        close(poll_fd.fd);
+                        close(state.filefd_);
+                        fds[poll_fd.fd].fd = -1;
+                        state = ClientState();
+                    }
+                    if (bytes_read == 0)
+                    {
+                        close(state.filefd_);
+                        if (state.keep_alive_)
+                        {
+                            fds[poll_fd.fd].events = POLLIN;
+                            state.state_ = ClientState::READ;
+                            state.pos_ = 0;
+                            state.filefd_ = -1;
+                        }
+                        else
+                        {
+                            close(poll_fd.fd);
+                            fds[poll_fd.fd].fd = -1;
+                            state = ClientState();
+                        }
+                    }
+                }
+            }
         }
     }
 }
