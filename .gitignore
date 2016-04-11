@@ -1,5 +1,6 @@
 build/
 web-server
 web-client
+web-server-async
 *.dSYM/
 .vagrant/

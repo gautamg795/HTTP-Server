@@ -5,7 +5,7 @@ LDFLAGS = -lpthread
 SRCDIR = ./src
 OBJDIR = ./build
 OBJS = $(addprefix $(OBJDIR)/,HTTPRequest.o HTTPResponse.o)
-all: web-server web-client
+all: web-server web-client web-server-async
 
 debug: CXXFLAGS = -O0 -std=c++11 -Wall -Wextra -D_DEBUG -g
 debug: all
@@ -14,6 +14,9 @@ web-client: $(OBJS) $(SRCDIR)/web-client.cpp
 	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS)
 
 web-server: $(OBJS) $(OBJDIR)/HTTPServer.o $(SRCDIR)/web-server.cpp
+	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS)
+
+web-server-async: $(OBJS) $(OBJDIR)/HTTPServer.o $(SRCDIR)/web-server-async.cpp
 	$(CXX) -o $@ $(CXXFLAGS) $^ $(LDFLAGS)
 
 $(OBJDIR)/HTTPRequest.o: $(SRCDIR)/HTTPRequest.cpp $(SRCDIR)/HTTPRequest.h $(SRCDIR)/logging.h
@@ -34,7 +37,7 @@ clean:
 	rm -rf $(OBJDIR)
 	rm -f web-server-client.tar.gz
 	rm -rf *.dSYM/
-	rm -f web-server web-client
+	rm -f web-server web-client web-server-async
 
 tarball: req-user-id clean
 	tar czf $(USERID).tar.gz ./*
