@@ -66,9 +66,8 @@ HTTPServer::HTTPServer(const std::string& hostname,
                        const std::string& directory) :
     hostname_(hostname), port_(port), directory_(directory), sockfd_(-1)
 {
-    #if !defined(__GNUC__) || __GNUC__ >= 5
+    // Escape spaces in the directory name so we can cd there
     directory_ = std::regex_replace(directory_, std::regex(R"(([^\\]) )"), R"($1\ )");
-    #endif
     ::setenv("IFS", "\n", 1);
     wordexp_t expansion;
     if (wordexp(directory_.c_str(), &expansion, 0) != 0 || expansion.we_wordc < 1)
