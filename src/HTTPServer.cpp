@@ -391,10 +391,10 @@ void HTTPServer::run_async()
                                response.set_header("Content-Length",
                                                    std::to_string(filesize));
                            }
-                           // Default to non-persistent unless the client
+                           // Default to persistent unless the client
                            // requests otherwise
-                           response.set_header("Connection", "close");
-                           state.keep_alive_ = false;
+                           response.set_header("Connection", "keep-alive");
+                           state.keep_alive_ = true;
                            // Check what the client requested
                            auto connection = request.header_value("Connection");
                            if (connection)
@@ -402,16 +402,17 @@ void HTTPServer::run_async()
                                 auto conn_str = *connection;
                                 std::transform(conn_str.begin(), conn_str.end(),
                                                conn_str.begin(), ::tolower);
-                                if (conn_str == "keep-alive")
+                                if (conn_str == "close")
                                 {
                                     response.set_header("Connection",
-                                                        "keep-alive");
-                                    response.set_header(
-                                            "Keep-Alive",
-                                            "timeout=" +
-                                            std::to_string(HTTPServer::timeout));
-                                    state.keep_alive_ = true;
+                                                        "close");
+                                    state.keep_alive_ = false;
                                 }
+                           }
+                           if (state.keep_alive_)
+                           {
+                               response.set_header("Keep-Alive", "timeout=" +
+                                       std::to_string(HTTPServer::timeout));
                            }
                        }
                        // Store the prepared response to send on our next cycle
@@ -680,8 +681,8 @@ void HTTPServer::process_request(int socket)
             {
                 response.set_header("Content-Length", std::to_string(filesize));
             }
-            // Default to non-persistent connection
-            response.set_header("Connection", "close");
+            // Default to persistent connection
+            response.set_header("Connection", "keep-alive");
             // Check if the client requested a specific connection type
             auto connection = request.header_value("Connection");
             if (connection)
@@ -689,13 +690,16 @@ void HTTPServer::process_request(int socket)
                 auto conn_str = *connection;
                 std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
                                                                 ::tolower);
-                if (conn_str == "keep-alive")
+                if (conn_str == "close")
                 {
-                    response.set_header("Connection", "keep-alive");
-                    response.set_header(
-                            "Keep-Alive",
-                            "timeout=" + std::to_string(HTTPServer::timeout));
+                    response.set_header("Connection", "close");
                 }
+            }
+            if (*response.header_value("Connection") == "keep-alive")
+            {
+                response.set_header("Keep-Alive", "timeout=" +
+                        std::to_string(HTTPServer::timeout));
+
             }
         }
         // Generate the response text we're sending back
