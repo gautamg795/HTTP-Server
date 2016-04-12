@@ -292,38 +292,41 @@ void HTTPServer::run_async()
                     state.buf_ = std::move(state.remainder_);
                     // Start writing where we left off
                     state.pos_ = state.buf_.size();
-                    // Make sure we have some room to read
-                    state.buf_.resize(256 + state.buf_.size());
-                    // Read as much as we can
-                    int bytes_read = recv(poll_fd.fd, &state.buf_[state.pos_],
-                                          state.buf_.size() - state.pos_, 0);
-                    state.pos_ += bytes_read;
-                    // If recv returned 0, the client disconnected
-                    if (bytes_read == 0)
+                    if (state.buf_.find("\r\n\r\n") == std::string::npos)
                     {
-                        LOG_INFO << "Connection closed by peer" << LOG_END;
-                        close(poll_fd.fd);
-                        fds[poll_fd.fd].fd = -1;
-                        state = ClientState();
-                        continue;
-                    }
-                    // Error check
-                    if (bytes_read < 0)
-                    {
-                        // EWOULDBLOCK means the client wasn't actually ready
-                        // so try again later
-                        if (errno == EWOULDBLOCK)
+                        // Make sure we have some room to read
+                        state.buf_.resize(256 + state.buf_.size());
+                        // Read as much as we can
+                        int bytes_read = recv(poll_fd.fd, &state.buf_[state.pos_],
+                                state.buf_.size() - state.pos_, 0);
+                        state.pos_ += bytes_read;
+                        // If recv returned 0, the client disconnected
+                        if (bytes_read == 0)
                         {
-                            LOG_INFO << "Read would block" << LOG_END;
+                            LOG_INFO << "Connection closed by peer" << LOG_END;
+                            close(poll_fd.fd);
+                            fds[poll_fd.fd].fd = -1;
+                            state = ClientState();
                             continue;
                         }
-                        LOG_ERROR << "read(): " << std::strerror(errno) << LOG_END;
-                        close(poll_fd.fd);
-                        fds[poll_fd.fd].fd = -1;
-                        state = ClientState();
-                        break;
+                        // Error check
+                        if (bytes_read < 0)
+                        {
+                            // EWOULDBLOCK means the client wasn't actually ready
+                            // so try again later
+                            if (errno == EWOULDBLOCK)
+                            {
+                                LOG_INFO << "Read would block" << LOG_END;
+                                continue;
+                            }
+                            LOG_ERROR << "read(): " << std::strerror(errno) << LOG_END;
+                            close(poll_fd.fd);
+                            fds[poll_fd.fd].fd = -1;
+                            state = ClientState();
+                            break;
+                        }
                     }
-                    // Check if we've read a full request in
+                    // Check if we've read a full request in now
                     if (state.buf_.find("\r\n\r\n") != std::string::npos)
                     {
                         // If so, try to parse it
@@ -339,7 +342,10 @@ void HTTPServer::run_async()
                            close(poll_fd.fd);
                            fds[poll_fd.fd].fd = -1;
                            state = ClientState();
+                           continue;
                        }
+                       LOG_INFO << "Request recieved:\n"
+                           << request << LOG_END;
                        // Start working on the response
                        HTTPResponse response;
                        response.set_version("HTTP/1.1");
