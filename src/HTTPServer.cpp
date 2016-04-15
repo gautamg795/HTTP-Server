@@ -174,6 +174,9 @@ void HTTPServer::install_signal_handler() const
     // Call that function if we get SIGINT or SIGTERM
     sigaction(SIGINT, &action, nullptr);
     sigaction(SIGTERM, &action, nullptr);
+    action.sa_handler = SIG_IGN;
+    sigaction(SIGPIPE, &action, nullptr);
+    sigaction(SIGCHLD, &action, nullptr);
 }
 
 /**
