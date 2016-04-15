@@ -404,8 +404,16 @@ void HTTPServer::run_async()
                            }
                            // Default to persistent unless the client
                            // requests otherwise
-                           response.set_header("Connection", "keep-alive");
-                           state.keep_alive_ = true;
+                           if (request.version() == "HTTP/1.1")
+                           {
+                               response.set_header("Connection", "keep-alive");
+                               state.keep_alive_ = true;
+                           }
+                           else
+                           {
+                               response.set_header("Connection", "close");
+                               state.keep_alive_ = false;
+                           }
                            // Check what the client requested
                            auto connection = request.header_value("Connection");
                            if (connection)
@@ -418,6 +426,12 @@ void HTTPServer::run_async()
                                     response.set_header("Connection",
                                                         "close");
                                     state.keep_alive_ = false;
+                                }
+                                else if (conn_str == "keep-alive")
+                                {
+                                    response.set_header("Connection",
+                                                        "keep-alive");
+                                    state.keep_alive_ = true;
                                 }
                            }
                            if (state.keep_alive_)
@@ -693,7 +707,14 @@ void HTTPServer::process_request(int socket)
                 response.set_header("Content-Length", std::to_string(filesize));
             }
             // Default to persistent connection
-            response.set_header("Connection", "keep-alive");
+            if (request.version() == "HTTP/1.1")
+            {
+                response.set_header("Connection", "keep-alive");
+            }
+            else
+            {
+                response.set_header("Connection", "close");
+            }
             // Check if the client requested a specific connection type
             auto connection = request.header_value("Connection");
             if (connection)
@@ -704,6 +725,10 @@ void HTTPServer::process_request(int socket)
                 if (conn_str == "close")
                 {
                     response.set_header("Connection", "close");
+                }
+                else if (conn_str == "keep-alive")
+                {
+                    response.set_header("Connection", "keep-alive");
                 }
             }
             if (*response.header_value("Connection") == "keep-alive")
