@@ -1,6 +1,10 @@
 #include "HTTPResponse.h"
-#include <sstream>  // for istringstream, basic_istream, basic_istream::tellg
-#include <utility>  // for move, pair
+
+#include <sstream>      // for operator<<, basic_ostream, getline, basic_ist...
+#include <string>       // for char_traits, operator==, hash, basic_string
+#include <type_traits>  // for move
+#include <utility>      // for pair
+
 
 HTTPResponse::HTTPResponse(const std::string& resp)
 {

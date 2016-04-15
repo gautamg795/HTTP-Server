@@ -7,29 +7,31 @@
 #include <sys/sendfile.h>  // for sendfile
 #endif
 
-#include <algorithm>       // for transform
 #include <arpa/inet.h>     // for inet_ntoa
+#include <fcntl.h>         // for open, O_RDONLY
+#include <netdb.h>         // for addrinfo, freeaddrinfo, gai_strerror, geta...
+#include <netinet/in.h>    // for IPPROTO_TCP, sockaddr_in
+#include <poll.h>          // for poll
+#include <sys/select.h>    // for select
+#include <sys/socket.h>    // for send, accept, bind, listen, recv, setsockopt
+#include <sys/stat.h>      // for fstat, stat
+#include <sys/time.h>      // for timeval
+#include <unistd.h>        // for close, off_t, read, ssize_t
+#include <wordexp.h>       // for wordexp
+
+#include <algorithm>       // for transform
 #include <cctype>          // for tolower
 #include <cerrno>          // for errno, EINTR
 #include <csignal>         // for sigaction, SIGINT, SIGTERM, etc
 #include <cstdlib>         // for exit
 #include <cstring>         // for strerror, memset
 #include <exception>       // for exception
-#include <fcntl.h>         // for open, O_RDONLY
-#include <functional>      // for _Bind, bind
 #include <iostream>        // for operator<<, basic_ostream, ostream, cout
-#include <netdb.h>         // for addrinfo, freeaddrinfo, gai_strerror, geta...
-#include <netinet/in.h>    // for IPPROTO_TCP, sockaddr_in
+#include <regex>           // for regex_replace, regex, regex_traits
 #include <string>          // for char_traits, string, operator<<, operator==
-#include <poll.h>          // for poll
-#include <sys/select.h>    // for select
-#include <sys/socket.h>    // for send, accept, bind, listen, recv, setsockopt
-#include <sys/stat.h>      // for fstat, stat
-#include <sys/time.h>      // for timeval
-#include <regex>
 #include <thread>          // for thread
-#include <unistd.h>        // for close, off_t, read, ssize_t
-#include <wordexp.h>       // for wordexp
+#include <type_traits>     // for move
+#include <vector>          // for vector
 
 static bool keep_running = true;
 int HTTPServer::timeout = 5;

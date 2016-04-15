@@ -1,8 +1,12 @@
 #include "HTTPRequest.h"
 
-#include <sstream>    // for operator<<, basic_ostream, basic_istream, basic...
-#include <stdexcept>  // for logic_error
-#include <utility>    // for move, pair
+#include <sstream>      // for operator<<, basic_ostream, getline, basic_ist...
+#include <stdexcept>    // for runtime_error
+#include <string>       // for char_traits, operator==, hash, basic_string
+#include <type_traits>  // for move
+#include <utility>      // for pair
+
+
 HTTPRequest::HTTPRequest(const std::string& req, std::string* remain)
 {
     std::istringstream iss(req);
