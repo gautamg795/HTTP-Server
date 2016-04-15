@@ -382,7 +382,7 @@ void HTTPServer::run_async()
                        // point, send back a 404
                        if (!state.file_ok_)
                        {
-                           LOG_INFO << "Response: HTTP/1.0 404 Not Found"
+                           LOG_INFO << "Response: HTTP/1.1 404 Not Found"
                                     << LOG_END;
                            response.set_status("404");
                            response.set_phrase("Not Found");
@@ -393,7 +393,7 @@ void HTTPServer::run_async()
                        // Otherwise prepare the 200 response
                        else
                        {
-                           LOG_INFO << "Response: HTTP/1.0 200 OK" << LOG_END;
+                           LOG_INFO << "Response: HTTP/1.1 200 OK" << LOG_END;
                            response.set_status("200");
                            response.set_phrase("OK");
                            if (state.file_ok_)
@@ -676,7 +676,7 @@ void HTTPServer::process_request(int socket)
         // If finding a file fails at any point, send a 404
         if (!file_ok)
         {
-            LOG_INFO << "Response: HTTP/1.0 404 Not Found" << LOG_END;
+            LOG_INFO << "Response: HTTP/1.1 404 Not Found" << LOG_END;
             response.set_status("404");
             response.set_phrase("Not Found");
             response.set_header("Connection", "close");
@@ -684,7 +684,7 @@ void HTTPServer::process_request(int socket)
         }
         else
         {
-            LOG_INFO << "Response: HTTP/1.0 200 OK" << LOG_END;
+            LOG_INFO << "Response: HTTP/1.1 200 OK" << LOG_END;
             response.set_status("200");
             response.set_phrase("OK");
             // Set the content-length header if we opened a file
