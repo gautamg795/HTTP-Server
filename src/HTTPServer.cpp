@@ -336,6 +336,8 @@ void HTTPServer::run_async()
                     {
                         // If so, try to parse it
                        HTTPRequest request;
+                       HTTPResponse response;
+                       response.set_version("HTTP/1.1");
                        try
                        {
                            HTTPRequest _request(state.buf_, &state.remainder_);
@@ -344,16 +346,25 @@ void HTTPServer::run_async()
                        {
                            LOG_ERROR << "HTTPRequest construction failed: "
                                      << ex.what() << LOG_END;
-                           close(poll_fd.fd);
-                           fds[poll_fd.fd].fd = -1;
-                           state = ClientState();
+                           response.set_status("400");
+                           response.set_phrase("Bad Request");
+                           response.set_header("Connection", "close");
+                           response.set_body("<h1>Bad Request</h1>");
+                           state.file_ok_ = false;
+                           state.keep_alive_ = false;
+                           // Store the prepared response to send on our next cycle
+                           state.buf_ = response.to_string();
+                           state.pos_ = 0;
+                           // Set the state to WRITE_RESPONSE so we know what to do
+                           state.state_ = ClientState::WRITE_RESPONSE;
+                           // We want to be notified when the client is ready to
+                           // receive data
+                           fds[poll_fd.fd].events = POLLOUT;
                            continue;
                        }
                        LOG_INFO << "Request recieved:\n"
                            << request << LOG_END;
                        // Start working on the response
-                       HTTPResponse response;
-                       response.set_version("HTTP/1.1");
                        // Try to open the file
                        state.filefd_ = open(("." + request.path()).c_str(), O_RDONLY);
                        if (state.filefd_ < 0)
@@ -644,7 +655,11 @@ void HTTPServer::process_request(int socket)
             buf.resize(pos);
         }
         // Try to parse the request
+        bool request_ok = true;
+        bool file_ok = false;
+        int filefd = -1;
         HTTPRequest request;
+        HTTPResponse response;
         try
         {
             HTTPRequest _request(buf, &remainder);
@@ -654,88 +669,104 @@ void HTTPServer::process_request(int socket)
         } catch (const std::exception& ex)
         {
             LOG_ERROR << "HTTPRequest construction failed: " << ex.what() << LOG_END;
-            close(socket);
-            return;
-        }
-        LOG_INFO << "Request recieved:\n"
-                << request << LOG_END;
-        HTTPResponse response;
-        response.set_version("HTTP/1.1");
-        LOG_INFO << "Attempting to open file at " << '.'
-                << request.path() << LOG_END;
-        // Flag that we set to false if file opening fails at any point
-        bool file_ok = true;
-        // Prepend '.' because the path starts with a '/'
-        int filefd = open(("." + request.path()).c_str(), O_RDONLY);
-        if (filefd < 0)
-        {
-            LOG_ERROR << "open(): " << std::strerror(errno) << " opening file "
-                    << "." << request.path() << LOG_END;
-            file_ok = false;
-        }
-        off_t filesize = 0;
-        // Try to get the filesize, if it opened correctly
-        if (file_ok) {
-            struct stat filestat;
-            if (fstat(filefd, &filestat) != -1)
-            {
-                // Make sure we opened a regular file
-                if (!S_ISREG(filestat.st_mode))
-                    file_ok = false;
-                filesize = filestat.st_size;
-            }
-            else
-                file_ok = false;
-        }
-        // If finding a file fails at any point, send a 404
-        if (!file_ok)
-        {
-            LOG_INFO << "Response: HTTP/1.1 404 Not Found" << LOG_END;
-            response.set_status("404");
-            response.set_phrase("Not Found");
+            request_ok = false;
+            response.set_version("HTTP/1.1");
+            response.set_status("400");
+            response.set_phrase("Bad Request");
             response.set_header("Connection", "close");
-            response.set_body("<h1>404 Not Found</h1>");
+            response.set_body("<h1>Bad Request</h1>");
         }
-        else
+        if (request.verb() != "GET")
         {
-            LOG_INFO << "Response: HTTP/1.1 200 OK" << LOG_END;
-            response.set_status("200");
-            response.set_phrase("OK");
-            // Set the content-length header if we opened a file
-            if (file_ok)
+            LOG_ERROR << "Non-GET request received" << LOG_END;
+            request_ok = false;
+            response.set_version("HTTP/1.1");
+            response.set_status("501");
+            response.set_phrase("Not Implemented");
+            response.set_header("Connection", "close");
+            response.set_body("<h1>Not Implemented</h1>");
+        }
+        if (request_ok)
+        {
+            LOG_INFO << "Request recieved:\n"
+                << request << LOG_END;
+            response.set_version("HTTP/1.1");
+            LOG_INFO << "Attempting to open file at " << '.'
+                << request.path() << LOG_END;
+            // Flag that we set to false if file opening fails at any point
+            file_ok = true;
+            // Prepend '.' because the path starts with a '/'
+            filefd = open(("." + request.path()).c_str(), O_RDONLY);
+            if (filefd < 0)
             {
-                response.set_header("Content-Length", std::to_string(filesize));
+                LOG_ERROR << "open(): " << std::strerror(errno) << " opening file "
+                    << "." << request.path() << LOG_END;
+                file_ok = false;
             }
-            // Default to persistent connection
-            if (request.version() == "HTTP/1.1")
+            off_t filesize = 0;
+            // Try to get the filesize, if it opened correctly
+            if (file_ok) {
+                struct stat filestat;
+                if (fstat(filefd, &filestat) != -1)
+                {
+                    // Make sure we opened a regular file
+                    if (!S_ISREG(filestat.st_mode))
+                        file_ok = false;
+                    filesize = filestat.st_size;
+                }
+                else
+                    file_ok = false;
+            }
+            // If finding a file fails at any point, send a 404
+            if (!file_ok)
             {
-                response.set_header("Connection", "keep-alive");
+                LOG_INFO << "Response: HTTP/1.1 404 Not Found" << LOG_END;
+                response.set_status("404");
+                response.set_phrase("Not Found");
+                response.set_header("Connection", "close");
+                response.set_body("<h1>404 Not Found</h1>");
             }
             else
             {
-                response.set_header("Connection", "close");
-            }
-            // Check if the client requested a specific connection type
-            auto connection = request.header_value("Connection");
-            if (connection)
-            {
-                auto conn_str = *connection;
-                std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
-                                                                ::tolower);
-                if (conn_str == "close")
+                LOG_INFO << "Response: HTTP/1.1 200 OK" << LOG_END;
+                response.set_status("200");
+                response.set_phrase("OK");
+                // Set the content-length header if we opened a file
+                if (file_ok)
                 {
-                    response.set_header("Connection", "close");
+                    response.set_header("Content-Length", std::to_string(filesize));
                 }
-                else if (conn_str == "keep-alive")
+                // Default to persistent connection
+                if (request.version() == "HTTP/1.1")
                 {
                     response.set_header("Connection", "keep-alive");
                 }
-            }
-            if (*response.header_value("Connection") == "keep-alive")
-            {
-                response.set_header("Keep-Alive", "timeout=" +
-                        std::to_string(HTTPServer::timeout));
+                else
+                {
+                    response.set_header("Connection", "close");
+                }
+                // Check if the client requested a specific connection type
+                auto connection = request.header_value("Connection");
+                if (connection)
+                {
+                    auto conn_str = *connection;
+                    std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
+                            ::tolower);
+                    if (conn_str == "close")
+                    {
+                        response.set_header("Connection", "close");
+                    }
+                    else if (conn_str == "keep-alive")
+                    {
+                        response.set_header("Connection", "keep-alive");
+                    }
+                }
+                if (*response.header_value("Connection") == "keep-alive")
+                {
+                    response.set_header("Keep-Alive", "timeout=" +
+                            std::to_string(HTTPServer::timeout));
 
+                }
             }
         }
         // Generate the response text we're sending back
