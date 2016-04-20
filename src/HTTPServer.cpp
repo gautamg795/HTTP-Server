@@ -34,7 +34,7 @@
 #include <vector>          // for vector
 
 static bool keep_running = true;
-int HTTPServer::timeout = 5;
+int HTTPServer::timeout = 10;
 
 /**
  * @summary struct used by run_async to keep track of each client's connection
