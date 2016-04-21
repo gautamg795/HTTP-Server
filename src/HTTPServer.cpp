@@ -590,6 +590,7 @@ void HTTPServer::process_request(int socket)
         // Check if the 'remainder' string contains a full request (so we don't
         // need to read more from the client)
         bool have_complete_request = remainder.find("\r\n\r\n") != std::string::npos;
+        // Next three variables are used by select() to monitor a socket
         fd_set fdset;
         FD_ZERO(&fdset);
         FD_SET(socket, &fdset);
@@ -601,6 +602,7 @@ void HTTPServer::process_request(int socket)
         {
             timeout.tv_sec = HTTPServer::timeout;
             timeout.tv_usec = 0;
+            // Monitor the socket, waiting `timeout` seconds for data
             ret = select(socket+1, &fdset, nullptr, nullptr, &timeout);
         }
         else
