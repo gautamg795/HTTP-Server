@@ -103,7 +103,7 @@ HTTPServer::HTTPServer(const std::string& hostname,
     int ret = getaddrinfo(hostname_.c_str(), port_.c_str(), &hints, &res);
     if (ret != 0)
     {
-        std::cout << gai_strerror(ret) << std::endl;
+        LOG_ERROR << gai_strerror(ret) << LOG_END;
         std::exit(ret);
     }
     // getaddrinfo populates res as a linked list of results
@@ -658,6 +658,7 @@ void HTTPServer::process_request(int socket)
         bool request_ok = true;
         bool file_ok = false;
         int filefd = -1;
+        off_t filesize = 0;
         HTTPRequest request;
         HTTPResponse response;
         try
@@ -703,7 +704,6 @@ void HTTPServer::process_request(int socket)
                     << "." << request.path() << LOG_END;
                 file_ok = false;
             }
-            off_t filesize = 0;
             // Try to get the filesize, if it opened correctly
             if (file_ok) {
                 struct stat filestat;
