@@ -4,3 +4,4 @@ web-client
 web-server-async
 *.dSYM/
 .vagrant/
+.DS_Store
