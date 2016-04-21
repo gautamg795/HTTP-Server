@@ -16,9 +16,14 @@ HTTPRequest::HTTPRequest(const std::string& req, std::string* remain)
         std::getline(iss, line);
     }
     while (line.empty() && iss);
-    line.pop_back(); // remove \r
-    if (line.empty())
+    if (!line.empty())
+    {
+        line.pop_back(); // remove \r
+    }
+    else
+    {
         throw std::runtime_error("Malformed request");
+    }
     verb_ = line.substr(0, line.find_first_of(' '));
     path_ = line.substr(verb_.size() + 1,
                         line.find_last_of(' ') - verb_.size() - 1);
