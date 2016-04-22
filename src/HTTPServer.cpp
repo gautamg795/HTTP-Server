@@ -394,6 +394,22 @@ void HTTPServer::run_async()
                        }
                        // Set persistent connection as necessary
                        state.keep_alive_ = set_conn_type(request, response);
+                       if (request.verb() != "GET")
+                       {
+                            LOG_ERROR << "Non-GET request received" << LOG_END;
+                            LOG_INFO << request.verb() << LOG_END;
+                            response.make_501();
+                            state.file_ok_ = false;
+                            // Store the prepared response to send on our next cycle
+                            state.buf_ = response.to_string();
+                            state.pos_ = 0;
+                            // Set the state to WRITE_RESPONSE so we know what to do
+                            state.state_ = ClientState::WRITE_RESPONSE;
+                            // We want to be notified when the client is ready to
+                            // receive data
+                            fds[poll_fd.fd].events = POLLOUT;
+                            continue;
+                       }
                        LOG_INFO << "Request recieved:\n"
                            << request << LOG_END;
                        // Start working on the response
