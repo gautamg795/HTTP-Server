@@ -41,7 +41,9 @@ HTTPRequest::HTTPRequest(const std::string& req, std::string* remain)
         headers_.emplace(std::move(header), std::move(value));
     }
     if (iss && remain)
+    {
         *remain = iss.str().substr(iss.tellg());
+    }
 }
 
 
