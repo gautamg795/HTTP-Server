@@ -362,6 +362,7 @@ void HTTPServer::run_async()
                             break;
                         }
                     }
+                    state.buf_.resize(state.pos_);
                     // Check if we've read a full request in now
                     if (state.buf_.find("\r\n\r\n") != std::string::npos)
                     {
