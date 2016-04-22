@@ -116,3 +116,31 @@ std::ostream& operator<<(std::ostream& os, const HTTPResponse& res)
     os << res.body();
     return os;
 }
+
+void HTTPResponse::make_404()
+{
+    set_version("HTTP/1.1");
+    set_status("404");
+    set_phrase("Not Found");
+    set_body("<h1>Not Found</h1>");
+    set_header("Content-Length", std::to_string(body_.size()));
+}
+
+void HTTPResponse::make_400()
+{
+    set_version("HTTP/1.1");
+    set_status("400");
+    set_phrase("Bad Request");
+    set_body("<h1>Bad Request</h1>");
+    set_header("Content-Length", std::to_string(body_.size()));
+}
+
+void HTTPResponse::make_501()
+{
+    set_version("HTTP/1.1");
+    set_status("501");
+    set_phrase("Not Implemented");
+    set_body("<h1>Not Implemented</h1>");
+    set_header("Content-Length", std::to_string(body_.size()));
+
+}

@@ -29,6 +29,10 @@ public:
 
     std::string to_string() const;
 
+    void make_404();
+    void make_400();
+    void make_501();
+
     friend std::ostream& operator<<(std::ostream&, const HTTPResponse&);
 
 private:
