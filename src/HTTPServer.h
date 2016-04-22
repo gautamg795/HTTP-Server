@@ -2,6 +2,9 @@
 #define HTTPSERVER_H
 #include <string>  // for string
 
+class HTTPRequest;
+class HTTPResponse;
+
 class HTTPServer
 {
 public:
@@ -18,6 +21,7 @@ public:
 
 private:
     static void process_request(int socket);
+    static bool set_conn_type(const HTTPRequest& req, HTTPResponse& resp);
     static int  timeout;
     std::string hostname_;
     std::string port_;

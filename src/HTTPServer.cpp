@@ -54,6 +54,37 @@ struct ClientState
     bool        keep_alive_ = false;
 };
 
+bool HTTPServer::set_conn_type(const HTTPRequest& req, HTTPResponse& resp)
+{
+    bool keep_alive = req.version() != "HTTP/1.0";
+    auto connection = req.header_value("Connection");
+    if (connection)
+    {
+        std::string conn_str = *connection;
+        std::transform(conn_str.begin(), conn_str.end(),
+                conn_str.begin(), ::tolower);
+        if (conn_str == "close")
+        {
+            keep_alive = false;
+        }
+        else if (conn_str == "keep-alive")
+        {
+            keep_alive = true;
+        }
+    }
+    if (keep_alive)
+    {
+        resp.set_header("Connection", "keep-alive");
+        resp.set_header("Keep-Alive", "timeout=" +
+                std::to_string(HTTPServer::timeout));
+    }
+    else
+    {
+        resp.set_header("Connection", "close");
+    }
+    return keep_alive;
+}
+
 /**
  * @summary Constructs the HTTPServer, performs hostname lookup, binds the
  * socket, changes directory as necessary.
@@ -346,12 +377,10 @@ void HTTPServer::run_async()
                        {
                            LOG_ERROR << "HTTPRequest construction failed: "
                                      << ex.what() << LOG_END;
-                           response.set_status("400");
-                           response.set_phrase("Bad Request");
-                           response.set_header("Connection", "close");
-                           response.set_body("<h1>Bad Request</h1>");
+                           response.make_400();
+                           state.keep_alive_ = true;
+                           response.set_header("Connection", "keep-alive");
                            state.file_ok_ = false;
-                           state.keep_alive_ = false;
                            // Store the prepared response to send on our next cycle
                            state.buf_ = response.to_string();
                            state.pos_ = 0;
@@ -362,6 +391,8 @@ void HTTPServer::run_async()
                            fds[poll_fd.fd].events = POLLOUT;
                            continue;
                        }
+                       // Set persistent connection as necessary
+                       state.keep_alive_ = set_conn_type(request, response);
                        LOG_INFO << "Request recieved:\n"
                            << request << LOG_END;
                        // Start working on the response
@@ -395,11 +426,7 @@ void HTTPServer::run_async()
                        {
                            LOG_INFO << "Response: HTTP/1.1 404 Not Found"
                                     << LOG_END;
-                           response.set_status("404");
-                           response.set_phrase("Not Found");
-                           response.set_header("Connection", "close");
-                           state.keep_alive_ = false;
-                           response.set_body("<h1>404 Not Found</h1>");
+                           response.make_404();
                        }
                        // Otherwise prepare the 200 response
                        else
@@ -412,43 +439,6 @@ void HTTPServer::run_async()
                                // Set the content-length header
                                response.set_header("Content-Length",
                                                    std::to_string(filesize));
-                           }
-                           // Default to persistent unless the client
-                           // requests otherwise
-                           if (request.version() == "HTTP/1.1")
-                           {
-                               response.set_header("Connection", "keep-alive");
-                               state.keep_alive_ = true;
-                           }
-                           else
-                           {
-                               response.set_header("Connection", "close");
-                               state.keep_alive_ = false;
-                           }
-                           // Check what the client requested
-                           auto connection = request.header_value("Connection");
-                           if (connection)
-                           {
-                                auto conn_str = *connection;
-                                std::transform(conn_str.begin(), conn_str.end(),
-                                               conn_str.begin(), ::tolower);
-                                if (conn_str == "close")
-                                {
-                                    response.set_header("Connection",
-                                                        "close");
-                                    state.keep_alive_ = false;
-                                }
-                                else if (conn_str == "keep-alive")
-                                {
-                                    response.set_header("Connection",
-                                                        "keep-alive");
-                                    state.keep_alive_ = true;
-                                }
-                           }
-                           if (state.keep_alive_)
-                           {
-                               response.set_header("Keep-Alive", "timeout=" +
-                                       std::to_string(HTTPServer::timeout));
                            }
                        }
                        // Store the prepared response to send on our next cycle
@@ -673,21 +663,16 @@ void HTTPServer::process_request(int socket)
         {
             LOG_ERROR << "HTTPRequest construction failed: " << ex.what() << LOG_END;
             request_ok = false;
-            response.set_version("HTTP/1.1");
-            response.set_status("400");
-            response.set_phrase("Bad Request");
-            response.set_header("Connection", "close");
-            response.set_body("<h1>Bad Request</h1>");
+            response.make_400();
         }
+        // Set persistent if necessary
+        response.set_version("HTTP/1.1");
+        set_conn_type(request, response);
         if (request.verb() != "GET")
         {
             LOG_ERROR << "Non-GET request received" << LOG_END;
             request_ok = false;
-            response.set_version("HTTP/1.1");
-            response.set_status("501");
-            response.set_phrase("Not Implemented");
-            response.set_header("Connection", "close");
-            response.set_body("<h1>Not Implemented</h1>");
+            response.make_501();
         }
         if (request_ok)
         {
@@ -723,10 +708,7 @@ void HTTPServer::process_request(int socket)
             if (!file_ok)
             {
                 LOG_INFO << "Response: HTTP/1.1 404 Not Found" << LOG_END;
-                response.set_status("404");
-                response.set_phrase("Not Found");
-                response.set_header("Connection", "close");
-                response.set_body("<h1>404 Not Found</h1>");
+                response.make_404();
             }
             else
             {
@@ -737,37 +719,6 @@ void HTTPServer::process_request(int socket)
                 if (file_ok)
                 {
                     response.set_header("Content-Length", std::to_string(filesize));
-                }
-                // Default to persistent connection
-                if (request.version() == "HTTP/1.1")
-                {
-                    response.set_header("Connection", "keep-alive");
-                }
-                else
-                {
-                    response.set_header("Connection", "close");
-                }
-                // Check if the client requested a specific connection type
-                auto connection = request.header_value("Connection");
-                if (connection)
-                {
-                    auto conn_str = *connection;
-                    std::transform(conn_str.begin(), conn_str.end(), conn_str.begin(),
-                            ::tolower);
-                    if (conn_str == "close")
-                    {
-                        response.set_header("Connection", "close");
-                    }
-                    else if (conn_str == "keep-alive")
-                    {
-                        response.set_header("Connection", "keep-alive");
-                    }
-                }
-                if (*response.header_value("Connection") == "keep-alive")
-                {
-                    response.set_header("Keep-Alive", "timeout=" +
-                            std::to_string(HTTPServer::timeout));
-
                 }
             }
         }
