@@ -1,4 +1,5 @@
 #include "HTTPResponse.h"
+#include "logging.h"
 
 #include <sstream>      // for operator<<, basic_ostream, getline, basic_ist...
 #include <string>       // for char_traits, operator==, hash, basic_string
@@ -28,7 +29,21 @@ HTTPResponse::HTTPResponse(const std::string& resp)
         std::string value = line.substr(line.find_first_of(' '));
         headers_.emplace(std::move(header), std::move(value));
     }
-    body_ = iss.str().substr(iss.tellg());
+    auto length_str = header_value("Content-Length");
+    if (!length_str)
+    {
+        LOG_INFO << "No content length provided" << LOG_END;
+        body_ = iss.str().substr(iss.tellg());
+    }
+    else
+    {
+        size_t content_length = std::stoul(*length_str);
+        body_ = iss.str().substr(iss.tellg(), content_length);
+        if (body_.size() < content_length)
+            throw std::runtime_error("Incomplete body, expected length "
+                    + std::to_string(content_length) + ", got "
+                    + std::to_string(body_.size()));
+    }
 }
 
 
