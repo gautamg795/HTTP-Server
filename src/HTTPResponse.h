@@ -9,7 +9,7 @@ class HTTPResponse
 {
 public:
     HTTPResponse() = default;
-    HTTPResponse(const std::string& resp);
+    HTTPResponse(const std::string& resp, std::string* remain = nullptr);
     HTTPResponse(const HTTPResponse&) = default;
     
     const std::string& version() const;

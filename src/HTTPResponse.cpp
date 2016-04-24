@@ -7,7 +7,7 @@
 #include <utility>      // for pair
 
 
-HTTPResponse::HTTPResponse(const std::string& resp)
+HTTPResponse::HTTPResponse(const std::string& resp, std::string* remain)
 {
     std::istringstream iss(resp);
     std::string line;
@@ -29,20 +29,14 @@ HTTPResponse::HTTPResponse(const std::string& resp)
         std::string value = line.substr(line.find_first_of(' '));
         headers_.emplace(std::move(header), std::move(value));
     }
-    auto length_str = header_value("Content-Length");
-    if (!length_str)
+    if (remain)
     {
-        LOG_INFO << "No content length provided" << LOG_END;
-        body_ = iss.str().substr(iss.tellg());
+        *remain = iss.str().substr(iss.tellg());
+        return;
     }
     else
     {
-        size_t content_length = std::stoul(*length_str);
-        body_ = iss.str().substr(iss.tellg(), content_length);
-        if (body_.size() < content_length)
-            throw std::runtime_error("Incomplete body, expected length "
-                    + std::to_string(content_length) + ", got "
-                    + std::to_string(body_.size()));
+        body_ = iss.str().substr(iss.tellg());
     }
 }
 

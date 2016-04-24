@@ -21,11 +21,11 @@ void download_file(const URL& input);
 
 void download_files(const std::vector<URL>& urls);
 
-HTTPRequest construct_request(const URL& input);
+HTTPRequest construct_request(const URL& input, bool persistent);
 
 bool write_request(int sockfd, const HTTPRequest& request);
 
-bool read_response(int sockfd, HTTPResponse& response);
+int read_response(int sockfd, HTTPResponse& response);
 
 
 #endif
