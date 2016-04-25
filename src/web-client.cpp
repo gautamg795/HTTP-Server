@@ -1,26 +1,57 @@
-#include "web-client.h"
+#include "HTTPRequest.h"
+#include "HTTPResponse.h"
 #include "logging.h"
-#include <string>
-#include <regex>
-#include <vector>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <sys/time.h>
+
 #include <fstream>
+#include <netdb.h>
+#include <regex>
+#include <string>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <unordered_map>
+#include <vector>
+
 #ifdef __APPLE__
 #define MSG_NOSIGNAL SO_NOSIGPIPE
 #endif
 
+/**
+ * constant declarations
+ */
 const int OK = 0;
 const int SOCKET_ERROR = 1;
 const int CONNECTION_CLOSED = 2;
 const int NO_LENGTH = 3;
 const int TIMEOUT = 4;
 
+/**
+ * auxiliary structures
+ */
+struct URL
+{
+public:
+	std::string hostname_;
+	std::string port_;
+	std::string path_;
+};
 
+/**
+ * function declarations
+ */
+URL parse_url(const char* input);
+void download_file(const URL& input);
+void download_files(const std::vector<URL>& urls);
+HTTPRequest construct_request(const URL& input, bool persistent);
+int write_request(int sockfd, const HTTPRequest& request);
+int read_response(int sockfd, HTTPResponse& response);
+int read_response_persistent(int sockfd, HTTPResponse& response);
+
+
+/**
+ * implementations
+ */
 int main(int argc, char** argv)
 {
     if (argc < 2)
