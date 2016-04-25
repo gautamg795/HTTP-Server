@@ -41,22 +41,11 @@ int main(int argc, char** argv)
         urls[key].push_back(current_url);
     }
 
-    // make sure to call download_files
     for (const auto& url_pair : urls)
     {
         download_files(url_pair.second);
     }
 
-
-    // std::vector<URL> urls;
-    // for (int i = 1; i < argc; i++)
-    // {
-    //  urls.push_back(parse_url(argv[i]));
-    // }
-    // for (auto url : urls)
-    // {
-    //  download_file(url);
-    // }
 }
 
 
