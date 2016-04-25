@@ -15,8 +15,9 @@ HTTPResponse::HTTPResponse(const std::string& resp, std::string* remain)
     line.pop_back(); // remove \r
     version_ = line.substr(0, line.find_first_of(' '));
     status_ = line.substr(version_.size() + 1,
-                          line.find_last_of(' ') - version_.size() - 1);
-    phrase_ = line.substr(line.find_last_of(' ') + 1);
+                          line.find(' ', version_.size() + 2)
+                            - version_.size() - 1);
+    phrase_ = line.substr(version_.size() + status_.size() + 2);
     while (std::getline(iss, line))
     {
         line.pop_back(); // remove \r
