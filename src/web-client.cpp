@@ -17,6 +17,8 @@
 const int OK = 0;
 const int SOCKET_ERROR = 1;
 const int CONNECTION_CLOSED = 2;
+const int NO_LENGTH = 3;
+const int TIMEOUT = 4;
 
 
 int main(int argc, char** argv)
@@ -67,7 +69,7 @@ HTTPRequest construct_request(const URL& input, bool persistent)
     return request;
 }
 
-bool write_request(int sockfd, const HTTPRequest& request)
+int write_request(int sockfd, const HTTPRequest& request)
 {
     std::string request_string = request.to_string();
     off_t pos = 0;
@@ -81,43 +83,73 @@ bool write_request(int sockfd, const HTTPRequest& request)
         {
             if (errno == EPIPE)
             {
-                return false;
+                return CONNECTION_CLOSED;
             }
             if (errno == EAGAIN)
             {
                 LOG_ERROR << "Connection to server timed out" << LOG_END;
-                return false;
+                return TIMEOUT;
             }
             LOG_ERROR << "send(): " << std::strerror(errno) << LOG_END;
-            return false;
+            return SOCKET_ERROR;
         }
 
         pos += bytes_written;
     } while (bytes_written > 0);
     if (pos == 0)
     {
-        return false;
+        return CONNECTION_CLOSED;
     }
-    return true;
-
+    return OK;
 }
 
 int read_response(int sockfd, HTTPResponse& response)
 {
     std::string buf;
-    std::string remainder;
-    bool has_length = true;
     ssize_t bytes_read = 0;
-    buf.resize(256);
     off_t pos = 0;
+    buf.resize(256);
     do {
-        bytes_read = recv(sockfd, &buf[pos], buf.length() - pos, 0);
-        pos += bytes_read;
         if (buf.size() - pos < 8)
         {
             buf.resize(buf.size() * 2);
         }
-        if (has_length && buf.find("\r\n\r\n") != std::string::npos)
+        bytes_read = recv(sockfd, &buf[pos], buf.length() - pos, 0);
+        pos += bytes_read;
+    } while (bytes_read > 0);
+    if (bytes_read < 0)
+    {
+        if (errno == EAGAIN)
+        {
+            LOG_ERROR << "Connection to server timed out" << LOG_END;
+            return TIMEOUT;
+        }
+        else
+        {
+            LOG_ERROR << "recv(): " << std::strerror(errno) << LOG_END;
+            return SOCKET_ERROR;
+        }
+    }
+    buf.resize(pos);
+    response = HTTPResponse(buf);
+    return OK;
+}
+
+int read_response_persistent(int sockfd, HTTPResponse& response)
+{
+    std::string buf;
+    std::string remainder;
+    ssize_t bytes_read = 0;
+    buf.resize(256);
+    off_t pos = 0;
+    do {
+        if (buf.size() - pos < 8)
+        {
+            buf.resize(buf.size() * 2);
+        }
+        bytes_read = recv(sockfd, &buf[pos], buf.length() - pos, 0);
+        pos += bytes_read;
+        if (buf.find("\r\n\r\n") != std::string::npos)
         {
             buf.resize(pos);
             response = HTTPResponse(buf, &remainder);
@@ -125,8 +157,7 @@ int read_response(int sockfd, HTTPResponse& response)
             if (!length_str)
             {
                 LOG_INFO << "No content length provided" << LOG_END;
-                has_length = false;
-                continue;
+                return NO_LENGTH;
             }
             ssize_t content_length = std::stol(*length_str);
             pos = remainder.size();
@@ -139,30 +170,21 @@ int read_response(int sockfd, HTTPResponse& response)
             break;
         }
     } while (bytes_read > 0);
-    if (bytes_read == 0)
-    {
-        return CONNECTION_CLOSED;
-    }
     if (bytes_read < 0)
     {
         if (errno == EAGAIN)
         {
             LOG_ERROR << "Connection to server timed out" << LOG_END;
+            return TIMEOUT;
         }
         else
         {
             LOG_ERROR << "recv(): " << std::strerror(errno) << LOG_END;
+            return SOCKET_ERROR;
         }
-        return SOCKET_ERROR;
-    }
-
-    if (!has_length)
-    {
-        response = HTTPResponse(buf);
     }
     return OK;
 }
-
 
 URL parse_url(const char* input)
 {
@@ -243,7 +265,7 @@ void download_file(const URL& input)
     HTTPRequest request = construct_request(input, false);
 
     // write to socket
-    if (!write_request(sockfd, request))
+    if (write_request(sockfd, request) != OK)
     {
         close(sockfd);
         return;
@@ -264,6 +286,7 @@ void download_file(const URL& input)
         {
             filename = "index.html";
         }
+        LOG_INFO << "HTTP 200 OK getting file " << filename << LOG_END;
         std::fstream fs(filename, std::fstream::out | std::fstream::trunc );
         fs << response.body();
         fs.close();
@@ -344,9 +367,16 @@ void download_files(const std::vector<URL>& urls)
         HTTPRequest request = construct_request(current_url, true);
 
         // write to socket
-        if (!write_request(sockfd, request))
+        int ret = write_request(sockfd, request);
+        if (ret == TIMEOUT)
         {
-            LOG_INFO << "Server closed connection, reverting to non-persistent" << LOG_END;
+            close(sockfd);
+            return;
+        }
+        else if (ret != OK)
+        {
+            close(sockfd);
+            LOG_INFO << "Persistent connection failed, reverting to non-persistent" << LOG_END;
             for (const URL& single_url : urls)
                 download_file(single_url);
             return;
@@ -354,15 +384,16 @@ void download_files(const std::vector<URL>& urls)
 
         // read from socket
         HTTPResponse response;
-        int ret = read_response(sockfd, response);
-        if (ret == SOCKET_ERROR)
+        ret = read_response_persistent(sockfd, response);
+        if (ret == TIMEOUT)
         {
             close(sockfd);
             return;
         }
-        else if (ret == CONNECTION_CLOSED)
+        else if (ret != OK)
         {
-            LOG_INFO << "Server closed connection, reverting to non-persistent" << LOG_END;
+            close(sockfd);
+            LOG_INFO << "Persistent connection failed, reverting to non-persistent" << LOG_END;
             for (const URL& single_url : urls)
                 download_file(single_url);
             return;
@@ -375,6 +406,7 @@ void download_files(const std::vector<URL>& urls)
             {
                 filename = "index.html";
             }
+            LOG_INFO << filename << ":  200 OK" << LOG_END
             std::fstream fs(filename, std::fstream::out | std::fstream::trunc );
             fs << response.body();
         }

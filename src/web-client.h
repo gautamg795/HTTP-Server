@@ -23,9 +23,10 @@ void download_files(const std::vector<URL>& urls);
 
 HTTPRequest construct_request(const URL& input, bool persistent);
 
-bool write_request(int sockfd, const HTTPRequest& request);
+int write_request(int sockfd, const HTTPRequest& request);
 
 int read_response(int sockfd, HTTPResponse& response);
+int read_response_persistent(int sockfd, HTTPResponse& response);
 
 
 #endif
