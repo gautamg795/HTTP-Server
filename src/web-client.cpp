@@ -10,6 +10,9 @@
 #include <sys/time.h>
 #include <fstream>
 #include <unordered_map>
+#ifdef __APPLE__
+#define MSG_NOSIGNAL SO_NOSIGPIPE
+#endif
 
 const int OK = 0;
 const int SOCKET_ERROR = 1;
