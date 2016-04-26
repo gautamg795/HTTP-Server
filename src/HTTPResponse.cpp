@@ -1,5 +1,4 @@
 #include "HTTPResponse.h"
-#include "logging.h"
 
 #include <sstream>      // for operator<<, basic_ostream, getline, basic_ist...
 #include <string>       // for char_traits, operator==, hash, basic_string

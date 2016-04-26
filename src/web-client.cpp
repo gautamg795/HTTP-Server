@@ -1,18 +1,26 @@
-#include "HTTPRequest.h"
-#include "HTTPResponse.h"
-#include "logging.h"
+#include "HTTPRequest.h"          // for HTTPRequest
+#include "HTTPResponse.h"         // for HTTPResponse
+#include "logging.h"              // for LOG_END, LOG_ERROR, LOG_INFO
 
-#include <fstream>
-#include <netdb.h>
-#include <regex>
-#include <string>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <unordered_map>
-#include <vector>
+#include <netdb.h>                // for addrinfo, gai_strerror, getaddrinfo
+#include <sys/socket.h>           // for setsockopt, recv, SOL_SOCKET, connect
+#include <sys/time.h>             // for timeval
+#include <sys/types.h>            // for ssize_t, off_t
+#include <unistd.h>               // for close
 
+#include <cstdlib>                // for exit
+#include <cstring>                // for strerror, memset
+#include <fstream>                // for fstream
+#include <iostream>               // for operator<<
+#include <regex>                  // for match_results, basic_regex
+#include <stdexcept>              // for runtime_error
+#include <string>                 // for char_traits, basic_string
+#include <type_traits>            // for move
+#include <unordered_map>          // for unordered_map
+#include <utility>                // for pair
+#include <vector>                 // for vector
+
+// Apple doesn't have MSG_NOSIGNAL for some reason...
 #ifdef __APPLE__
 #define MSG_NOSIGNAL SO_NOSIGPIPE
 #endif
