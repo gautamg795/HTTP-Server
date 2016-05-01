@@ -29,3 +29,13 @@ Additionally, a (very) verbose debug build can be created by issuing the `make d
 The latter is implemented using `poll`, and the former simply spawns a new `std::thread` for each new request.
 * HTTP/1.1: Both client and server support HTTP/1.1 persistent connections, and the server fully supports pipelined requests,
 and the client uses persistent connections for all URLs given on the same host, falling back to non-persistent as necessary.
+
+## Architecture
+### HTTP Request/Response
+HTTP Request/Response architecture here
+### Server
+Server architecture here
+##### Synchronous Server
+##### Asynchronous Server
+### Client
+Client architecture here
