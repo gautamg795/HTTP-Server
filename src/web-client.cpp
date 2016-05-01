@@ -287,7 +287,9 @@ void download_file(const URL& input)
     if (ptr == nullptr)
     {
         LOG_ERROR << "Client failed to connect to host" << LOG_END;
+        return;
     }
+    freeaddrinfo(res);
     struct timeval timeout;
     timeout.tv_sec = 10;
     timeout.tv_usec = 0;
@@ -385,8 +387,9 @@ void download_files(const std::vector<URL>& urls)
     if (ptr == nullptr)
     {
         LOG_ERROR << "Client failed to connect to host" << LOG_END;
+        return;
     }
-
+    freeaddrinfo(res);
     struct timeval timeout;
     timeout.tv_sec = 10;
     timeout.tv_usec = 0;
