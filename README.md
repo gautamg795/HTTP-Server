@@ -30,11 +30,27 @@ The latter is implemented using `poll`, and the former simply spawns a new `std:
 * HTTP/1.1: Both client and server support HTTP/1.1 persistent connections, and the server fully supports pipelined requests,
 and the client uses persistent connections for all URLs given on the same host, falling back to non-persistent as necessary.
 
-## Architecture
+## Design/Architecture
 ### HTTP Request/Response
-HTTP Request/Response architecture here
+HTTP Response and Request classes were created to encapsulate the various fields of requests and responses used by both client and server.
+Both `HTTPRequest` and `HTTPResponse` classes have two constructors, a default-initializing one, and a constructor taking a 
+`std::string` representing the raw wire-encoded request/response text. The latter constructor takes an optional `std::string* remainder`
+parameter for returning excess characters from the request/response to the caller. 
+
+The request and response have hardcoded `std::string` fields for the version, verb, and status code parameters, and then a 
+`std::unordered_map<std::string, std::string>` container is used for storing HTTP headers and their associated values. 
+
 ### Server
-Server architecture here
+The server was designed as a class, `HTTPServer`, that can be instantiated with three parameters: hostname, port, and serving directory.
+
+It has three public methods:
+* `void install_signal_handler()`: Used to install a signal handler for `SIGINT`, `SIGTERM`, `SIGCHLD`, and `SIGPIPE` to either ignore, or end the run loop, as necessary. 
+* `void run()`: Used to run the server synchronously as configured by the constructor.
+* `void run_async()` Used to run the server asynrchonously as configured by the constructor.
+
+The constructor handles parsing of the initial parameters. The `directory` parameter is tilde and glob-expanded, then `chdir()` is run
+to set the server's current workign directory. The `hostname` and `port` parameters are used with `getaddrinfo()` to create and bind
+to the appropriate TCP socket.
 ##### Synchronous Server
 ##### Asynchronous Server
 ### Client
